@@ -1,0 +1,94 @@
+services:
+  ingest:
+    image: bluenviron/mediamtx:latest
+    container_name: ingest
+    ports: ["1936:1935"]
+    restart: unless-stopped
+    
+  ffmpeg-pub:
+    image: jrottenberg/ffmpeg:6.1-alpine
+    profiles: ["manual"]
+    depends_on: [ingest]
+    entrypoint: ["ffmpeg"]
+    command: >
+      -re -f lavfi -i testsrc2=size=1280x720:rate=30
+      -f lavfi -i sine=frequency=1000:sample_rate=48000
+      -c:v libx264 -preset veryfast -b:v 2500k -g 60 -keyint_min 60 -sc_threshold 0
+      -c:a aac -b:a 128k -f flv rtmp://ingest:1935/mystream
+
+  origin-primary:
+    image: nginx:alpine
+    container_name: origin-primary
+    volumes:
+      - hls_primary:/usr/share/nginx/html/hls
+      - ./configs/nginx-origin.conf:/etc/nginx/conf.d/default.conf:ro
+    ports: ["8081:80"]
+    restart: unless-stopped
+
+  packager-primary:
+    image: jrottenberg/ffmpeg:6.1-alpine
+    container_name: packager-primary
+    depends_on: [ingest, origin-primary]
+    volumes: ["hls_primary:/hls"]
+    command: >
+      -loglevel warning -re -i rtmp://ingest:1935/mystream
+      -c:v libx264 -preset veryfast -b:v 2500k -g 60 -keyint_min 60 -sc_threshold 0
+      -c:a aac -b:a 128k
+      -f hls -hls_time 2 -hls_list_size 10
+      -hls_flags independent_segments+program_date_time+append_list+temp_file
+      -hls_segment_filename /hls/seg_%05d.ts
+      /hls/index.m3u8
+    restart: unless-stopped
+
+  origin-backup:
+    image: nginx:alpine
+    container_name: origin-backup
+    volumes:
+      - hls_backup:/usr/share/nginx/html/hls
+      - ./configs/nginx-origin.conf:/etc/nginx/conf.d/default.conf:ro
+    ports: ["8082:80"]
+    restart: unless-stopped
+
+  packager-backup:
+    image: jrottenberg/ffmpeg:6.1-alpine
+    container_name: packager-backup
+    depends_on: [ingest, origin-backup]
+    volumes: ["hls_backup:/hls"]
+    command: >
+      -loglevel warning -re -i rtmp://ingest:1935/mystream
+      -c:v libx264 -preset veryfast -b:v 1500k -g 60 -keyint_min 60 -sc_threshold 0
+      -c:a aac -b:a 96k
+      -f hls -hls_time 2 -hls_list_size 10
+      -hls_flags independent_segments+program_date_time+append_list+temp_file
+      -hls_segment_filename /hls/seg_%05d.ts
+      /hls/index.m3u8
+    restart: unless-stopped
+
+  publisher-daemon:
+    image: jrottenberg/ffmpeg:6.1-alpine
+    depends_on: [ingest]
+    entrypoint: ["ffmpeg"]
+    command: >
+      -re -f lavfi -i testsrc2=size=1280x720:rate=30
+      -f lavfi -i sine=frequency=1000:sample_rate=48000
+      -c:v libx264 -preset veryfast -b:v 2500k -g 60 -keyint_min 60 -sc_threshold 0
+      -c:a aac -b:a 128k -f flv rtmp://ingest:1935/mystream
+    restart: unless-stopped
+
+  switcher:
+    build: ./switcher
+    container_name: switcher
+    environment:
+      PRIMARY_BASE_URL: http://origin-primary/hls
+      BACKUP_BASE_URL:  http://origin-backup/hls
+      PLAYLIST_PATH: index.m3u8
+      CHECK_INTERVAL_SECONDS: 5
+      SEGMENT_AGE_THRESHOLD_SECONDS: 20
+      REQUIRED_WINDOWS: 3
+    ports: ["8080:8080"]
+    depends_on: [origin-primary, origin-backup]
+    restart: unless-stopped
+
+volumes:
+  hls_primary:
+  hls_backup:

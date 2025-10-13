@@ -1,0 +1,30 @@
+services:
+  ingest:
+    image: bluenviron/mediamtx:latest
+    container_name: ingest
+    ports: ["1936:1935"]   # host:container (evita conflito)
+    restart: unless-stopped
+
+  origin-primary:
+    image: nginx:alpine
+    volumes:
+      - hls_primary:/usr/share/nginx/html/hls
+      - ./configs/nginx-origin.conf:/etc/nginx/conf.d/default.conf:ro
+    ports: ["8081:80"]
+    restart: unless-stopped
+
+  packager-primary:
+    image: jrottenberg/ffmpeg:6.1-alpine
+    depends_on: [ingest, origin-primary]
+    volumes: ["hls_primary:/hls"]
+    command: >
+      -loglevel warning -re -i rtmp://ingest:1935/mystream
+      -c:v libx264 -preset veryfast -b:v 2500k -g 60 -keyint_min 60 -sc_threshold 0
+      -c:a aac -b:a 128k
+      -f hls -hls_time 2 -hls_list_size 10
+      -hls_flags independent_segments+program_date_time+append_list+temp_file
+      -hls_segment_filename /hls/seg_%05d.ts
+      /hls/index.m3u8
+
+volumes:
+  hls_primary:

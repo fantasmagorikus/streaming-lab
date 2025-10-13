@@ -1,0 +1,18 @@
+services:
+  prometheus:
+    image: prom/prometheus
+    ports: ["9090:9090"]
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    networks: [streamlab]
+
+  grafana:
+    image: grafana/grafana
+    ports: ["3000:3000"]
+    depends_on: [prometheus]
+    networks: [streamlab]
+
+networks:
+  streamlab:
+    external: true
+    name: streaming-lab_default

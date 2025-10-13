@@ -1,0 +1,6 @@
+global:
+  scrape_interval: 5s
+scrape_configs:
+  - job_name: "switcher"
+    static_configs:
+      - targets: ["switcher:8080"]
