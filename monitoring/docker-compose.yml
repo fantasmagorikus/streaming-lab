@@ -10,6 +10,9 @@ services:
     image: grafana/grafana
     ports: ["3000:3000"]
     depends_on: [prometheus]
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
     networks: [streamlab]
 
 networks:

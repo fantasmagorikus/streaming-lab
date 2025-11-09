@@ -1,0 +1,99 @@
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: streaming-lab-alerts
+    folder: Streaming Lab
+    interval: 1m
+    rules:
+      - uid: segAgePrim
+        title: Segment Age High (Primary)
+        condition: A
+        for: 1m
+        annotations:
+          summary: Primary origin playlist is stale (>25s) for more than 1 minute.
+        labels:
+          severity: warning
+          streamlab: primary
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: streaming-lab-prom
+            model:
+              datasource:
+                type: prometheus
+                uid: streaming-lab-prom
+              editorMode: code
+              expr: segment_age_seconds{origin="primary"}
+              format: time_series
+              hide: false
+              instant: false
+              interval: ""
+              intervalFactor: 2
+              legendFormat: primary
+              maxDataPoints: 43200
+              range: true
+              refId: A
+              step: 10
+              conditions:
+                - evaluator:
+                    params:
+                      - 25
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    type: max
+                  type: query
+        noDataState: NoData
+        execErrState: Alerting
+      - uid: failoverBurst
+        title: Failover Burst (>=2 in 5m)
+        condition: A
+        for: 0m
+        annotations:
+          summary: Switcher observed two or more failovers in the last 5 minutes.
+        labels:
+          severity: warning
+          streamlab: failover
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: streaming-lab-prom
+            model:
+              datasource:
+                type: prometheus
+                uid: streaming-lab-prom
+              editorMode: code
+              expr: increase(failovers_total[5m])
+              format: time_series
+              hide: false
+              instant: false
+              interval: ""
+              intervalFactor: 2
+              legendFormat: failovers
+              maxDataPoints: 43200
+              range: true
+              refId: A
+              step: 10
+              conditions:
+                - evaluator:
+                    params:
+                      - 2
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    type: last
+                  type: query
+        noDataState: NoData
+        execErrState: Alerting
